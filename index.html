@@ -620,6 +620,58 @@ body { font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-s
       console.error('Firebase save error:', e);
     }
   };
+
+  // ── 새 지점 Firebase에 저장 ──
+  window._firebaseSaveStore = async function(code, name) {
+    try {
+      const payload = {
+        zones: [],
+        userOverrides: {},
+        name: name,
+        savedAt: Date.now()
+      };
+      await set(ref(db, 'plan2026/' + code), payload);
+      
+      // 지점 목록도 저장
+      const storesRef = ref(db, 'plan2026/_stores/' + code);
+      await set(storesRef, { code: code, name: name });
+      
+      syncUI('saved', '지점 추가됨 ✓');
+    } catch(e) {
+      syncUI('error', '지점 추가 실패');
+      console.error('Firebase store save error:', e);
+    }
+  };
+
+  // ── 저장된 지점 목록 불러오기 ──
+  const storesRef = ref(db, 'plan2026/_stores');
+  onValue(storesRef, snap => {
+    const data = snap.val();
+    if (!data) return;
+    Object.keys(data).forEach(code => {
+      if (storeMap[code]) return; // 이미 있으면 스킵
+      const info = data[code];
+      storeMap[code] = {
+        zones: () => [],
+        overrides: () => ({}),
+        variable: () => [],
+        name: info.name
+      };
+      storeNames[code] = info.name;
+      storeUserOverrides[code] = {};
+      storeZonesSnapshot[code] = [];
+      
+      // 드롭다운에 옵션 추가
+      const select = document.getElementById('storeSelect');
+      if (select && !select.querySelector('option[value="'+code+'"]')) {
+        const option = document.createElement('option');
+        option.value = code;
+        option.textContent = info.name;
+        select.appendChild(option);
+      }
+    });
+    syncUI('saved', '동기화됨');
+  });
 </script>
 
 </head>
@@ -4099,8 +4151,13 @@ function addNewStore() {
   // 저장 드롭다운에도 추가
   updateSaveDropdown();
   
+  // Firebase에 새 지점 저장
+  if(typeof window._firebaseSaveStore === 'function'){
+    window._firebaseSaveStore(code, name);
+  }
+  
   closeAddStoreModal();
-  showToast('✅ ' + name + ' 추가됨');
+  showToast('✅ ' + name + ' 추가됨 (서버 동기화 완료)');
   
   // 새 지점으로 전환
   select.value = code;
